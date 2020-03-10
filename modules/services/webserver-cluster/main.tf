@@ -46,14 +46,14 @@ data "template_file" "user_data" {
 }
 
 resource "aws_lb" "example" {
-  name = "${var.cluster_name}-alb"
+  name = var.cluster_name
   load_balancer_type = "application"
   subnets = data.aws_subnet_ids.default.ids
   security_groups = [aws_security_group.alb.id]
 }
 
 resource "aws_lb_target_group" "asg" {
-  name = "${var.cluster_name}-asg-target-group"
+  name = var.cluster_name
   port = var.server_port
   protocol = "HTTP"
   vpc_id = data.aws_vpc.default.id
