@@ -5,20 +5,20 @@ data "aws_vpc" "default" {
 terraform {
   backend "s3" {
     bucket = "bijan-terraform-state"
-    key   = "stage/services/webserver-cluster/terraform.tfstate"
+    key    = "stage/services/webserver-cluster/terraform.tfstate"
     region = "us-east-2"
 
-  dynamodb_table = "bijan-terraform-locks"
-  encrypt = true
+    dynamodb_table = "bijan-terraform-locks"
+    encrypt        = true
   }
 }
 
 locals {
-  http_port = 80
-  any_port = 0
+  http_port    = 80
+  any_port     = 0
   any_protocol = "-1"
   tcp_protocol = "tcp"
-  all_ips = ["0.0.0.0/0"]
+  all_ips      = ["0.0.0.0/0"]
 }
 
 data "terraform_remote_state" "db" {
@@ -26,7 +26,7 @@ data "terraform_remote_state" "db" {
 
   config = {
     bucket = var.db_remote_state_bucket
-    key = var.db_remote_state_key
+    key    = var.db_remote_state_key
     region = "us-east-2"
   }
 }
@@ -40,39 +40,39 @@ data "template_file" "user_data" {
 
   vars = {
     server_port = var.server_port
-    db_address = data.terraform_remote_state.db.outputs.address
-    db_port = data.terraform_remote_state.db.outputs.port
+    db_address  = data.terraform_remote_state.db.outputs.address
+    db_port     = data.terraform_remote_state.db.outputs.port
   }
 }
 
 resource "aws_lb" "example" {
-  name = var.cluster_name
+  name               = var.cluster_name
   load_balancer_type = "application"
-  subnets = data.aws_subnet_ids.default.ids
-  security_groups = [aws_security_group.alb.id]
+  subnets            = data.aws_subnet_ids.default.ids
+  security_groups    = [aws_security_group.alb.id]
 }
 
 resource "aws_lb_target_group" "asg" {
-  name = var.cluster_name
-  port = var.server_port
+  name     = var.cluster_name
+  port     = var.server_port
   protocol = "HTTP"
-  vpc_id = data.aws_vpc.default.id
+  vpc_id   = data.aws_vpc.default.id
 
   health_check {
-    path = "/"
-    protocol = "HTTP"
-    matcher = "200"
-    interval = 15
-    timeout  = 3
-    healthy_threshold = 2
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200"
+    interval            = 15
+    timeout             = 3
+    healthy_threshold   = 2
     unhealthy_threshold = 2
   }
 }
 
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.example.arn
-  port  = local.http_port
-  protocol = "HTTP"
+  port              = local.http_port
+  protocol          = "HTTP"
 
   default_action {
     type = "fixed-response"
@@ -80,14 +80,14 @@ resource "aws_lb_listener" "http" {
     fixed_response {
       content_type = "text/plain"
       message_body = "404: Page not found"
-      status_code = 404
+      status_code  = 404
     }
   }
 }
 
 resource "aws_lb_listener_rule" "asg" {
   listener_arn = aws_lb_listener.http.arn
-  priority = 100
+  priority     = 100
 
   condition {
     path_pattern {
@@ -95,7 +95,7 @@ resource "aws_lb_listener_rule" "asg" {
     }
   }
   action {
-    type = "forward"
+    type             = "forward"
     target_group_arn = aws_lb_target_group.asg.arn
   }
 }
@@ -103,12 +103,12 @@ resource "aws_lb_listener_rule" "asg" {
 
 
 resource "aws_launch_configuration" "example" {
-  image_id  = "ami-0c55b159cbfafe1f0"
+  image_id      = "ami-0c55b159cbfafe1f0"
   instance_type = var.instance_type
-# here we specify which security group to use, which creates an implicit dependency
+  # here we specify which security group to use, which creates an implicit dependency
   security_groups = [aws_security_group.instance.id]
 
-# user data is a good way to run a script
+  # user data is a good way to run a script
   user_data = data.template_file.user_data.rendered
   /*
   user_data = <<-EOF
@@ -127,7 +127,7 @@ resource "aws_launch_configuration" "example" {
 
 resource "aws_autoscaling_group" "example" {
   launch_configuration = aws_launch_configuration.example.name
-  vpc_zone_identifier = data.aws_subnet_ids.default.ids
+  vpc_zone_identifier  = data.aws_subnet_ids.default.ids
 
   target_group_arns = [aws_lb_target_group.asg.arn]
   health_check_type = "ELB"
@@ -136,8 +136,8 @@ resource "aws_autoscaling_group" "example" {
   max_size = var.max_size
 
   tag {
-    key = "Name"
-    value = "${var.cluster_name}-asg"
+    key                 = "Name"
+    value               = "${var.cluster_name}-asg"
     propagate_at_launch = true
   }
 
@@ -153,9 +153,9 @@ resource "aws_security_group" "instance" {
   name = "${var.cluster_name}-instance"
 
   ingress {
-    from_port = var.server_port
-    to_port   = var.server_port
-    protocol  = local.tcp_protocol
+    from_port   = var.server_port
+    to_port     = var.server_port
+    protocol    = local.tcp_protocol
     cidr_blocks = local.all_ips
   }
 }
@@ -165,20 +165,20 @@ resource "aws_security_group" "alb" {
 }
 
 resource "aws_security_group_rule" "allow_http_inbound" {
-  from_port = local.http_port
-  protocol = local.tcp_protocol
+  from_port         = local.http_port
+  protocol          = local.tcp_protocol
   security_group_id = aws_security_group.alb.id
-  to_port = local.http_port
-  type = "ingress"
-  cidr_blocks = local.all_ips
+  to_port           = local.http_port
+  type              = "ingress"
+  cidr_blocks       = local.all_ips
 }
 
 resource "aws_security_group_rule" "allow_all_outbound" {
-  from_port = local.any_port
-  protocol = local.tcp_protocol
+  from_port         = local.any_port
+  protocol          = local.tcp_protocol
   security_group_id = aws_security_group.alb.id
-  to_port = local.any_port
-  type = "egress"
-  cidr_blocks = local.all_ips
+  to_port           = local.any_port
+  type              = "egress"
+  cidr_blocks       = local.all_ips
 
 }
